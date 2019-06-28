@@ -1,5 +1,5 @@
 /*
- * drivers/power/process.c - Functions for starting/stopping processes on 
+ * drivers/power/process.c - Functions for starting/stopping processes on
  *                           suspend transitions.
  *
  * Originally from swsusp.
@@ -25,7 +25,7 @@
  * Timeout for stopping processes
  * Put a lower value coz we need to freeze stuffs more
  */
-unsigned int __read_mostly freeze_timeout_msecs = 2 * MSEC_PER_SEC;
+unsigned int __read_mostly freeze_timeout_msecs = 1 * MSEC_PER_SEC;
 
 static int try_to_freeze_tasks(bool user_only)
 {
