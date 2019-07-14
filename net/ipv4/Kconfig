@@ -421,7 +421,7 @@ config INET_DIAG
 	  Support for INET (TCP, DCCP, etc) socket monitoring interface used by
 	  native Linux tools such as ss. ss is included in iproute2, currently
 	  downloadable at:
-	  
+
 	    http://www.linuxfoundation.org/collaborate/workgroups/networking/iproute2
 
 	  If unsure, say Y.
@@ -567,7 +567,7 @@ config TCP_CONG_VENO
 	distinguishing to circumvent the difficult judgment of the packet loss
 	type. TCP Veno cuts down less congestion window in response to random
 	loss packets.
-	See <http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=1177186> 
+	See <http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=1177186>
 
 config TCP_CONG_YEAH
 	tristate "YeAH TCP"
@@ -632,6 +632,17 @@ config TCP_CONG_CDG
 	  D.A. Hayes and G. Armitage. "Revisiting TCP congestion control using
 	  delay gradients." In Networking 2011. Preprint: http://goo.gl/No3vdg
 
+ config TCP_CONG_AGILESD
+	 tristate "Agile-SD Congestion control"
+	 default n
+	 ---help---
+
+		  This is version 1.0 of Agile-SD TCP. It is a sender-side only.
+		  It contributes the Agility Factor (AF) to shorten the epoch time
+		  and to make TCP independent from RTT. AF reduces the sensitivity
+		  to packet losses, which in turn Agile-SD to achieve better throughput
+		  over high-speed networks.
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_CUBIC
@@ -668,6 +679,9 @@ choice
 
 	config DEFAULT_RENO
 		bool "Reno"
+
+  config DEFAULT_AGILESD
+		bool "AGILESD" if TCP_CONG_AGILESD=y
 endchoice
 
 endif
@@ -690,7 +704,8 @@ config DEFAULT_TCP_CONG
 	default "dctcp" if DEFAULT_DCTCP
 	default "cdg" if DEFAULT_CDG
 	default "cubic"
-
+  default "agilesd" if DEFAULT_AGILESD
+	
 config TCP_MD5SIG
 	bool "TCP: MD5 Signature Option support (RFC2385)"
 	select CRYPTO
