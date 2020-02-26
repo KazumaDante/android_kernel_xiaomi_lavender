@@ -88,6 +88,7 @@
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
 #include <linux/cpufreq_times.h>
+#include <linux/power_supply.h>
 #ifdef CONFIG_HARDWALL
 #include <asm/hardwall.h>
 #endif
@@ -102,6 +103,10 @@ struct task_kill_info {
 	struct work_struct work;
 };
 
+static void kill_google_photos_work(struct work_struct *work);
+static DECLARE_WORK(kill_google_photos, kill_google_photos_work);
+static bool bat_discharging;
+
 static void proc_kill_task(struct work_struct *work)
 {
 	struct task_kill_info *kinfo = container_of(work, typeof(*kinfo), work);
@@ -111,6 +116,67 @@ static void proc_kill_task(struct work_struct *work)
 	put_task_struct(task);
 	kfree(kinfo);
 }
+
+static void kill_annoying_task(struct task_struct *task)
+{
+	struct task_kill_info *kinfo;
+
+	/* __GFP_NOFAIL is justified because this will free memory */
+	kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL | __GFP_NOFAIL);
+	kinfo->task = task;
+	INIT_WORK(&kinfo->work, proc_kill_task);
+	schedule_work(&kinfo->work);
+}
+
+static void kill_google_photos_work(struct work_struct *work)
+{
+	struct task_struct *task, *kill_task = NULL;
+
+	rcu_read_lock();
+	for_each_process(task) {
+		if (READ_ONCE(task->signal->oom_score_adj) < 250)
+			continue;
+
+		if (!strncmp(task->comm, "oid.apps.photos", TASK_COMM_LEN)) {
+			get_task_struct(task);
+			kill_task = task;
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	if (kill_task)
+		kill_annoying_task(kill_task);
+}
+
+static int power_notifier_cb(struct notifier_block *nb, unsigned long action,
+			     void *data)
+{
+	struct power_supply *psy = data;
+	union power_supply_propval val;
+
+	if (action != PSY_EVENT_PROP_CHANGED ||
+	    strcmp(psy->desc->name, "battery"))
+		return NOTIFY_OK;
+
+	if (!power_supply_get_property(psy, POWER_SUPPLY_PROP_STATUS, &val)) {
+		bat_discharging = val.intval == POWER_SUPPLY_STATUS_DISCHARGING;
+		if (bat_discharging)
+			schedule_work(&kill_google_photos);
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block power_notifier = {
+	.notifier_call = power_notifier_cb
+};
+
+static int __init init_power_notifier(void)
+{
+	return power_supply_reg_notifier(&power_notifier);
+}
+core_initcall(init_power_notifier);
 
 /* NOTE:
  *	Implementing inode permission operations in /proc is almost
@@ -1250,7 +1316,11 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 	if (has_capability_noaudit(current, CAP_SYS_RESOURCE))
 		task->signal->oom_score_adj_min = (short)oom_score_adj;
 	trace_oom_score_adj_update(task);
-	if (oom_score_adj >= 700 && !strcmp(task->comm, "id.GoogleCamera")) {
+
+	/* These apps burn through CPU in the background. Don't let them. */
+	if ((oom_score_adj >= 700 && !strcmp(task->comm, "id.GoogleCamera")) ||
+	    (oom_score_adj >= 250 && bat_discharging &&
+	     !strcmp(task->comm, "oid.apps.photos"))) {
 		kill_task = true;
 		get_task_struct(task);
 	}
@@ -1261,16 +1331,8 @@ err_task_lock:
 	task_unlock(task);
 	put_task_struct(task);
 out:
-	/* These apps burn through CPU in the background. Don't let them. */
-	if (kill_task) {
-		struct task_kill_info *kinfo;
-
-		/* __GFP_NOFAIL is justified because this will free memory */
-		kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL | __GFP_NOFAIL);
-		kinfo->task = task;
-		INIT_WORK(&kinfo->work, proc_kill_task);
-		schedule_work(&kinfo->work);
-	}
+	if (kill_task)
+		kill_annoying_task(task);
 	return err < 0 ? err : count;
 }
 
