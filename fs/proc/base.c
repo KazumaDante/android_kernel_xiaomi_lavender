@@ -1199,9 +1199,9 @@ static ssize_t oom_score_adj_read(struct file *file, char __user *buf,
 static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 					size_t count, loff_t *ppos)
 {
-	char task_comm[TASK_COMM_LEN];
 	struct task_struct *task;
 	char buffer[PROC_NUMBUF];
+	bool kill_task = false;
 	unsigned long flags;
 	int oom_score_adj;
 	int err;
@@ -1250,8 +1250,10 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 	if (has_capability_noaudit(current, CAP_SYS_RESOURCE))
 		task->signal->oom_score_adj_min = (short)oom_score_adj;
 	trace_oom_score_adj_update(task);
-	if (oom_score_adj >= 700)
-		strncpy(task_comm, task->comm, TASK_COMM_LEN);
+	if (oom_score_adj >= 700 && !strcmp(task->comm, "id.GoogleCamera")) {
+		kill_task = true;
+		get_task_struct(task);
+	}
 
 err_sighand:
 	unlock_task_sighand(task, &flags);
@@ -1260,18 +1262,14 @@ err_task_lock:
 	put_task_struct(task);
 out:
 	/* These apps burn through CPU in the background. Don't let them. */
-	if (!err && oom_score_adj >= 700) {
-		if (!strcmp(task_comm, "id.GoogleCamera")) {
-			struct task_kill_info *kinfo;
+	if (kill_task) {
+		struct task_kill_info *kinfo;
 
-			kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL);
-			if (kinfo) {
-				get_task_struct(task);
-				kinfo->task = task;
-				INIT_WORK(&kinfo->work, proc_kill_task);
-				schedule_work(&kinfo->work);
-			}
-		}
+		/* __GFP_NOFAIL is justified because this will free memory */
+		kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL | __GFP_NOFAIL);
+		kinfo->task = task;
+		INIT_WORK(&kinfo->work, proc_kill_task);
+		schedule_work(&kinfo->work);
 	}
 	return err < 0 ? err : count;
 }
