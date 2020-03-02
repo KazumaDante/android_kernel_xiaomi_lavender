@@ -398,6 +398,7 @@ int mmc_clk_update_freq(struct mmc_host *host,
 		return -EINVAL;
 	}
 
+	mmc_host_clk_hold(host);
 	cmdq_mode = mmc_card_cmdq(host->card);
 
 	/* make sure the card supports the frequency we want */
@@ -466,6 +467,7 @@ halt_failed:
 					mmc_hostname(host), __func__);
 	}
 out:
+	mmc_host_clk_release(host);
 	return err;
 }
 EXPORT_SYMBOL(mmc_clk_update_freq);
@@ -555,6 +557,7 @@ static int mmc_devfreq_set_target(struct device *dev,
 	 */
 	clk_scaling->need_freq_change = false;
 
+	mmc_host_clk_hold(host);
 	err = mmc_clk_update_freq(host, *freq, clk_scaling->state);
 	if (err && err != -EAGAIN) {
 		pr_err("%s: clock scale to %lu failed with error %d\n",
@@ -565,6 +568,8 @@ static int mmc_devfreq_set_target(struct device *dev,
 			mmc_hostname(host), *freq, current->comm);
 	}
 
+
+	mmc_host_clk_release(host);
 rel_host:
 	mmc_release_host(host);
 out:
@@ -1051,6 +1056,8 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 
 		if (mrq->done)
 			mrq->done(mrq);
+
+		mmc_host_clk_release(host);
 	}
 }
 
@@ -1158,6 +1165,7 @@ static int mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 			host->perf.start = ktime_get();
 #endif
 	}
+	mmc_host_clk_hold(host);
 	led_trigger_event(host->led, LED_FULL);
 
 	if (mmc_is_data_request(mrq)) {
@@ -1235,6 +1243,7 @@ static int mmc_start_cmdq_request(struct mmc_host *host,
 		mrq->cmd->mrq = mrq;
 	}
 
+	mmc_host_clk_hold(host);
 	mmc_cmdq_check_retune(host);
 	if (likely(host->cmdq_ops->request)) {
 		ret = host->cmdq_ops->request(host, mrq);
@@ -1245,6 +1254,7 @@ static int mmc_start_cmdq_request(struct mmc_host *host,
 	}
 
 	if (ret) {
+		mmc_host_clk_release(host);
 		pr_err("%s: %s: issue request failed, err=%d\n",
 			mmc_hostname(host), __func__, ret);
 	}
@@ -1630,7 +1640,9 @@ static void mmc_pre_req(struct mmc_host *host, struct mmc_request *mrq,
 		 bool is_first_req)
 {
 	if (host->ops->pre_req) {
+		mmc_host_clk_hold(host);
 		host->ops->pre_req(host, mrq, is_first_req);
+		mmc_host_clk_release(host);
 	}
 }
 
@@ -1647,7 +1659,9 @@ static void mmc_post_req(struct mmc_host *host, struct mmc_request *mrq,
 			 int err)
 {
 	if (host->ops->post_req) {
+		mmc_host_clk_hold(host);
 		host->ops->post_req(host, mrq, err);
+		mmc_host_clk_release(host);
 	}
 }
 
@@ -1705,6 +1719,7 @@ int mmc_cmdq_halt(struct mmc_host *host, bool halt)
 		return 0;
 	}
 
+	mmc_host_clk_hold(host);
 	if (host->cmdq_ops->halt) {
 		err = host->cmdq_ops->halt(host, halt);
 		if (!err && host->ops->notify_halt)
@@ -1718,6 +1733,7 @@ int mmc_cmdq_halt(struct mmc_host *host, bool halt)
 	} else {
 		err = -ENOSYS;
 	}
+	mmc_host_clk_release(host);
 	return err;
 }
 EXPORT_SYMBOL(mmc_cmdq_halt);
@@ -1737,6 +1753,7 @@ EXPORT_SYMBOL(mmc_cmdq_start_req);
 
 static void mmc_cmdq_dcmd_req_done(struct mmc_request *mrq)
 {
+	mmc_host_clk_release(mrq->host);
 	complete(&mrq->completion);
 }
 
@@ -1759,7 +1776,9 @@ int mmc_cmdq_wait_for_dcmd(struct mmc_host *host,
 				mmc_hostname(host), cmd->opcode,
 				cmd->error);
 		err = cmd->error;
+		mmc_host_clk_hold(host);
 		host->cmdq_ops->dumpstate(host);
+		mmc_host_clk_release(host);
 	}
 	return err;
 }
@@ -2086,9 +2105,9 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 		unsigned int timeout_us, limit_us;
 
 		timeout_us = data->timeout_ns / 1000;
-		if (card->host->ios.clock)
+		if (mmc_host_clk_rate(card->host))
 			timeout_us += data->timeout_clks * 1000 /
-				(card->host->ios.clock / 1000);
+				(mmc_host_clk_rate(card->host) / 1000);
 
 		if (data->flags & MMC_DATA_WRITE)
 			/*
@@ -2343,6 +2362,8 @@ void mmc_set_ios(struct mmc_host *host)
 		 ios->power_mode, ios->chip_select, ios->vdd,
 		 1 << ios->bus_width, ios->timing);
 
+	if (ios->clock > 0)
+		mmc_set_ungated(host);
 	host->ops->set_ios(host, ios);
 	if (ios->old_rate != ios->clock) {
 		if (likely(ios->clk_ts)) {
@@ -2365,8 +2386,10 @@ EXPORT_SYMBOL(mmc_set_ios);
  */
 void mmc_set_chip_select(struct mmc_host *host, int mode)
 {
+	mmc_host_clk_hold(host);
 	host->ios.chip_select = mode;
 	mmc_set_ios(host);
+	mmc_host_clk_release(host);
 }
 
 /*
@@ -2386,8 +2409,78 @@ static void __mmc_set_clock(struct mmc_host *host, unsigned int hz)
 
 void mmc_set_clock(struct mmc_host *host, unsigned int hz)
 {
+	mmc_host_clk_hold(host);
 	__mmc_set_clock(host, hz);
+	mmc_host_clk_release(host);
 }
+
+#ifdef CONFIG_MMC_CLKGATE
+/*
+ * This gates the clock by setting it to 0 Hz.
+ */
+void mmc_gate_clock(struct mmc_host *host)
+{
+	unsigned long flags;
+
+	WARN_ON(!host->ios.clock);
+
+	spin_lock_irqsave(&host->clk_lock, flags);
+	host->clk_old = host->ios.clock;
+	host->ios.clock = 0;
+	host->clk_gated = true;
+	spin_unlock_irqrestore(&host->clk_lock, flags);
+	mmc_set_ios(host);
+}
+
+/*
+ * This restores the clock from gating by using the cached
+ * clock value.
+ */
+void mmc_ungate_clock(struct mmc_host *host)
+{
+	/*
+	 * We should previously have gated the clock, so the clock shall
+	 * be 0 here! The clock may however be 0 during initialization,
+	 * when some request operations are performed before setting
+	 * the frequency. When ungate is requested in that situation
+	 * we just ignore the call.
+	 */
+	if (host->clk_old) {
+		WARN_ON(host->ios.clock);
+		/* This call will also set host->clk_gated to false */
+		__mmc_set_clock(host, host->clk_old);
+		/*
+		 * We have seen that host controller's clock tuning circuit may
+		 * go out of sync if controller clocks are gated.
+		 * To workaround this issue, we are triggering retuning of the
+		 * tuning circuit after ungating the controller clocks.
+		 */
+		mmc_retune_needed(host);
+	}
+}
+
+void mmc_set_ungated(struct mmc_host *host)
+{
+	unsigned long flags;
+
+	/*
+	 * We've been given a new frequency while the clock is gated,
+	 * so make sure we regard this as ungating it.
+	 */
+	spin_lock_irqsave(&host->clk_lock, flags);
+	host->clk_gated = false;
+	spin_unlock_irqrestore(&host->clk_lock, flags);
+}
+
+#else
+void mmc_set_ungated(struct mmc_host *host)
+{
+}
+
+void mmc_gate_clock(struct mmc_host *host)
+{
+}
+#endif
 
 int mmc_execute_tuning(struct mmc_card *card)
 {
@@ -2403,7 +2496,9 @@ int mmc_execute_tuning(struct mmc_card *card)
 	else
 		opcode = MMC_SEND_TUNING_BLOCK;
 
+	mmc_host_clk_hold(host);
 	err = host->ops->execute_tuning(host, opcode);
+	mmc_host_clk_release(host);
 
 	if (err)
 		pr_err("%s: tuning execution failed\n", mmc_hostname(host));
@@ -2418,8 +2513,10 @@ int mmc_execute_tuning(struct mmc_card *card)
  */
 void mmc_set_bus_mode(struct mmc_host *host, unsigned int mode)
 {
+	mmc_host_clk_hold(host);
 	host->ios.bus_mode = mode;
 	mmc_set_ios(host);
+	mmc_host_clk_release(host);
 }
 
 /*
@@ -2427,8 +2524,10 @@ void mmc_set_bus_mode(struct mmc_host *host, unsigned int mode)
  */
 void mmc_set_bus_width(struct mmc_host *host, unsigned int width)
 {
+	mmc_host_clk_hold(host);
 	host->ios.bus_width = width;
 	mmc_set_ios(host);
+	mmc_host_clk_release(host);
 }
 
 /*
@@ -2874,8 +2973,11 @@ int __mmc_set_signal_voltage(struct mmc_host *host, int signal_voltage)
 	int old_signal_voltage = host->ios.signal_voltage;
 
 	host->ios.signal_voltage = signal_voltage;
-	if (host->ops->start_signal_voltage_switch)
+	if (host->ops->start_signal_voltage_switch) {
+		mmc_host_clk_hold(host);
 		err = host->ops->start_signal_voltage_switch(host, &host->ios);
+		mmc_host_clk_release(host);
+	}
 
 	if (err)
 		host->ios.signal_voltage = old_signal_voltage;
@@ -2917,6 +3019,7 @@ int mmc_set_signal_voltage(struct mmc_host *host, int signal_voltage, u32 ocr)
 	 * Hold the clock reference so clock doesn't get auto gated during this
 	 * voltage switch sequence.
 	 */
+	mmc_host_clk_hold(host);
 	err = mmc_wait_for_cmd(host, &cmd, 0);
 	if (err) {
 		if (err == -ETIMEDOUT) {
@@ -2925,13 +3028,14 @@ int mmc_set_signal_voltage(struct mmc_host *host, int signal_voltage, u32 ocr)
 			err = -EAGAIN;
 			goto power_cycle;
 		} else {
-			return err;
+			goto err_command;
 		}
 	}
 
-	if (!mmc_host_is_spi(host) && (cmd.resp[0] & R1_ERROR))
-		return -EIO;
-
+	if (!mmc_host_is_spi(host) && (cmd.resp[0] & R1_ERROR)) {
+		err = -EIO;
+		goto err_command;
+	}
 	/*
 	 * The card should drive cmd and dat[0:3] low immediately
 	 * after the response of cmd11, but wait 1 ms to be sure
@@ -2985,6 +3089,9 @@ power_cycle:
 		mmc_power_cycle(host, ocr);
 	}
 
+err_command:
+	mmc_host_clk_release(host);
+
 	return err;
 }
 
@@ -2993,8 +3100,10 @@ power_cycle:
  */
 void mmc_set_timing(struct mmc_host *host, unsigned int timing)
 {
+	mmc_host_clk_hold(host);
 	host->ios.timing = timing;
 	mmc_set_ios(host);
+	mmc_host_clk_release(host);
 }
 
 /*
@@ -3002,8 +3111,10 @@ void mmc_set_timing(struct mmc_host *host, unsigned int timing)
  */
 void mmc_set_driver_type(struct mmc_host *host, unsigned int drv_type)
 {
+	mmc_host_clk_hold(host);
 	host->ios.drv_type = drv_type;
 	mmc_set_ios(host);
+	mmc_host_clk_release(host);
 }
 
 int mmc_select_drive_strength(struct mmc_card *card, unsigned int max_dtr,
@@ -3011,6 +3122,7 @@ int mmc_select_drive_strength(struct mmc_card *card, unsigned int max_dtr,
 {
 	struct mmc_host *host = card->host;
 	int host_drv_type = SD_DRIVER_TYPE_B;
+	int drive_strength;
 
 	*drv_type = 0;
 
@@ -3033,10 +3145,14 @@ int mmc_select_drive_strength(struct mmc_card *card, unsigned int max_dtr,
 	 * information and let the hardware specific code
 	 * return what is possible given the options
 	 */
-	return host->ops->select_drive_strength(card, max_dtr,
-						host_drv_type,
-						card_drv_type,
-						drv_type);
+	mmc_host_clk_hold(host);
+	drive_strength = host->ops->select_drive_strength(card, max_dtr,
+							  host_drv_type,
+							  card_drv_type,
+							  drv_type);
+	mmc_host_clk_release(host);
+
+	return drive_strength;
 }
 
 /*
@@ -3054,6 +3170,8 @@ void mmc_power_up(struct mmc_host *host, u32 ocr)
 {
 	if (host->ios.power_mode == MMC_POWER_ON)
 		return;
+
+	mmc_host_clk_hold(host);
 
 	mmc_pwrseq_pre_power_on(host);
 
@@ -3088,12 +3206,16 @@ void mmc_power_up(struct mmc_host *host, u32 ocr)
 	 * time required to reach a stable voltage.
 	 */
 	mmc_delay(10);
+
+	mmc_host_clk_release(host);
 }
 
 void mmc_power_off(struct mmc_host *host)
 {
 	if (host->ios.power_mode == MMC_POWER_OFF)
 		return;
+
+	mmc_host_clk_hold(host);
 
 	mmc_pwrseq_power_off(host);
 
@@ -3110,6 +3232,8 @@ void mmc_power_off(struct mmc_host *host)
 	 * can be successfully turned on again.
 	 */
 	mmc_delay(1);
+
+	mmc_host_clk_release(host);
 }
 
 void mmc_power_cycle(struct mmc_host *host, u32 ocr)
@@ -3381,7 +3505,7 @@ static unsigned int mmc_mmc_erase_timeout(struct mmc_card *card,
 		 */
 		timeout_clks <<= 1;
 		timeout_us += (timeout_clks * 1000) /
-			      (card->host->ios.clock / 1000);
+			      (mmc_host_clk_rate(card->host) / 1000);
 
 		erase_timeout = timeout_us / 1000;
 
@@ -3985,7 +4109,9 @@ static void mmc_hw_reset_for_init(struct mmc_host *host)
 {
 	if (!(host->caps & MMC_CAP_HW_RESET) || !host->ops->hw_reset)
 		return;
+	mmc_host_clk_hold(host);
 	host->ops->hw_reset(host);
+	mmc_host_clk_release(host);
 }
 
 /*
@@ -4031,9 +4157,10 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 {
 	host->f_init = freq;
 
-	pr_debug("%s: %s: trying to init card at %u Hz\n",
+#ifdef CONFIG_MMC_DEBUG
+	pr_info("%s: %s: trying to init card at %u Hz\n",
 		mmc_hostname(host), __func__, host->f_init);
-
+#endif
 	mmc_power_up(host, host->ocr_avail);
 
 	/*
@@ -4284,7 +4411,9 @@ int mmc_power_save_host(struct mmc_host *host)
 {
 	int ret = 0;
 
-	pr_debug("%s: %s: powering down\n", mmc_hostname(host), __func__);
+#ifdef CONFIG_MMC_DEBUG
+	pr_info("%s: %s: powering down\n", mmc_hostname(host), __func__);
+#endif
 
 	mmc_bus_get(host);
 
@@ -4308,7 +4437,9 @@ int mmc_power_restore_host(struct mmc_host *host)
 {
 	int ret;
 
-	pr_debug("%s: %s: powering up\n", mmc_hostname(host), __func__);
+#ifdef CONFIG_MMC_DEBUG
+	pr_info("%s: %s: powering up\n", mmc_hostname(host), __func__);
+#endif
 
 	mmc_bus_get(host);
 
