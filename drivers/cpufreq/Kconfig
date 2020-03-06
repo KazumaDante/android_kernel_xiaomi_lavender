@@ -159,6 +159,14 @@ config CPU_FREQ_DEFAULT_GOV_BLU_SCHEDUTIL
 			have a look at the help section of that governor. The fallback
 			governor will be 'performance'.
 
+			config CPU_FREQ_DEFAULT_GOV_ALESSA
+				bool "alessa"
+				select CPU_FREQ_GOV_ALESSA
+				help
+				  'alessa' This driver adds a dynamic cpufreq policy governor.
+				  The governor does a periodic polling and changes frequency based on the
+			      CPU utilization.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -338,6 +346,9 @@ config CPU_FREQ_GOV_ENERGY
 
 		If in doubt, say N.
 
+config CPU_FREQ_GOV_ALESSA
+	tristate "'alessa' cpufreq governor"
+	depends on CPU_FREQ
 
 comment "CPU frequency scaling drivers"
 
