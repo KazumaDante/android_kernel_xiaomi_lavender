@@ -39,8 +39,8 @@
 		qcom,panel-supply-entry@0 {
 			reg = <0>;
 			qcom,supply-name = "wqhd-vddio";
-			qcom,supply-min-voltage = <1800000>;
-			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-min-voltage = <1780000>;
+			qcom,supply-max-voltage = <1780000>;
 			qcom,supply-enable-load = <32000>;
 			qcom,supply-disable-load = <80>;
 			qcom,supply-post-on-sleep = <2>;
@@ -76,8 +76,8 @@
 			qcom,panel-supply-entry@0 {
 				reg = <0>;
 				qcom,supply-name = "wqhd-vddio";
-				qcom,supply-min-voltage = <1800000>;
-				qcom,supply-max-voltage = <1950000>;
+				qcom,supply-min-voltage = <1780000>;
+				qcom,supply-max-voltage = <1780000>;
 				qcom,supply-enable-load = <32000>;
 				qcom,supply-disable-load = <80>;
 			};
@@ -126,8 +126,8 @@
 		qcom,panel-supply-entry@0 {
 			reg = <0>;
 			qcom,supply-name = "wqhd-vddio";
-			qcom,supply-min-voltage = <1800000>;
-			qcom,supply-max-voltage = <1950000>;
+			qcom,supply-min-voltage = <1780000>;
+			qcom,supply-max-voltage = <1780000>;
 			qcom,supply-enable-load = <32000>;
 			qcom,supply-disable-load = <80>;
 		};
@@ -189,8 +189,8 @@
                26 21 09 0b 06 03 04 a0
                26 21 09 0b 06 03 04 a0
                26 20 0a 0b 06 03 04 a0];
-	qcom,mdss-dsi-min-refresh-rate = <48>;
-        qcom,mdss-dsi-max-refresh-rate = <60>;
+	qcom,mdss-dsi-min-refresh-rate = <70>;
+        qcom,mdss-dsi-max-refresh-rate = <70>;
 };
 
 &dsi_nt36672a_shenchao_fhdplus_video {
@@ -209,8 +209,8 @@
                26 21 09 0b 06 03 04 a0
                26 21 09 0b 06 03 04 a0
                26 20 0a 0b 06 03 04 a0];
-	qcom,mdss-dsi-min-refresh-rate = <48>;
-        qcom,mdss-dsi-max-refresh-rate = <60>;
+	qcom,mdss-dsi-min-refresh-rate = <61>;
+        qcom,mdss-dsi-max-refresh-rate = <61>;
 };
 
 &dsi_dual_sharp_video {

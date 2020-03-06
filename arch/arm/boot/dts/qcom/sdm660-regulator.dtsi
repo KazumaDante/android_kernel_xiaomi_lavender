@@ -596,12 +596,13 @@
 
 				qcom,cpr-corner-fmax-map = <1 2 3 4 5 6>;
 
+        /* GPU : -160mv on first 3,-150 on mid 3, -75 on last / Now we dont touch floor anymore*/
 				qcom,cpr-voltage-ceiling =
-					<585000  645000  725000  790000
-					 870000  925000 1070000>;
+					<415000  475000  555000  630000
+					 710000  765000  995000>;
 				qcom,cpr-voltage-floor =
-					<504000  504000  596000  652000
-					 712000  744000 1070000>;
+					<364000  364000  456000  512000
+					 572000  604000  995000>;
 
 				qcom,mem-acc-voltage = <1 1 1 2 2 2 2>;
 				qcom,system-voltage =
@@ -745,14 +746,14 @@
 
 					/* Speed bin 4 */
 					<2 3 4 5 8>;
-
-				qcom,cpr-voltage-ceiling =
-					< 644000  644000  644000  708000  788000
-					 1026900 1026900 1026900>;
-
-				qcom,cpr-voltage-floor =
-					<508000  508000  516000  572000  632000
-					 664000  704000  764000>;
+/* -160 first 3 -140 mid 3 -75 last 2 */
+          qcom,cpr-voltage-ceiling =
+            < 564000  564000  564000  648000  728000
+          	  928000  993000  993000>;
+/* lowered some floor values to avoid being higher then conresponding ceiling's value */
+          qcom,cpr-voltage-floor =
+          	 <554000  554000  554000  648000  712000
+          	  744000  784000  844000>;
 
 				qcom,corner-frequencies =
 					/* Speed bin 0 */
@@ -897,13 +898,14 @@
 					/* Speed-bin 4 */
 					<2 3 4 6 7>;
 
-				qcom,cpr-voltage-ceiling =
-					<644000  644000  708000  788000
-					 908000  908000 1026900>;
+/* Big Cluster : -140 on first 5 -75 on last 2/DONT TOUCH FLOOR ANYMORE */
+      qcom,cpr-voltage-ceiling =
+         <584000  584000  648000  728000
+          848000  913000  993000>;
 
-				qcom,cpr-voltage-floor =
-					<508000  516000  572000  632000
-					 664000  704000  864000>;
+      qcom,cpr-voltage-floor =
+         <458000  466000  522000  582000
+          614000  709000  769000>;
 
 				qcom,corner-frequencies =
 					/* Speed bin 0 */

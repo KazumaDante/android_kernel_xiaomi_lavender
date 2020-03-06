@@ -7,7 +7,7 @@ rm -rf '/home/kazu/android_kernel_xiaomi_lavender/out'
 cd "/home/kazu/android_kernel_xiaomi_lavender"
 wd=$(pwd)
 out=$wd/out
-BUILD="/home/android_kernel_xiaomi_lavender"
+BUILD="/home/kazu/android_kernel_xiaomi_lavender"
 # Set kernel source workspace
 cd $BUILD
 # Export ARCH <arm, arm64, x86, x86_64>

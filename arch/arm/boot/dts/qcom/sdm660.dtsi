@@ -826,11 +826,11 @@
 	qcom,msm-thermal {
 		compatible = "qcom,msm-thermal";
 		qcom,sensor-id = <1>;
-		qcom,poll-ms = <100>;
-		qcom,therm-reset-temp = <115>;
-		qcom,core-limit-temp = <70>;
+		qcom,poll-ms = <5000>;
+		qcom,therm-reset-temp = <100>;
+		qcom,core-limit-temp = <65>;
 		qcom,core-temp-hysteresis = <10>;
-		qcom,hotplug-temp = <105>;
+		qcom,hotplug-temp = <90>;
 		qcom,hotplug-temp-hysteresis = <20>;
 		qcom,online-hotplug-core;
 		qcom,synchronous-cluster-id = <0 1>;
@@ -1287,8 +1287,8 @@
 
 		qcom,pwrcl-speedbin1-v0 =
       <   100000000 0x0004000f 0x01200020 0x1 1 >,
-      <   300000000 0x0004000f 0x01200020 0x1 1 >,
-			<   633600000 0x05040021 0x03200020 0x1 2 >,
+      <   300000000 0x0004000f 0x01200020 0x1 2 >,
+			<   633600000 0x05040021 0x03200020 0x1 3 >,
 			<  1113600000 0x0404003a 0x052e002e 0x2 4 >,
 			<  1401600000 0x04040049 0x073a003a 0x2 5 >,
 			<  1536000000 0x04040050 0x08400040 0x2 6 >,
