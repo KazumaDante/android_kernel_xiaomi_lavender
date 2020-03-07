@@ -3238,8 +3238,8 @@ static struct clk_debug_mux gcc_debug_mux = {
 					0x005, 0, 0, 0, BM(18, 17) },
 		{ "gpucc_rbcpr_clk",		0x13d,	GPU,
 					0x003, 0, 0, 0, BM(18, 17) },
-		{ "pwrcl_clk",	0x0c0,	CPU,	0x000,	0x3, 8,	0x0FF },
-		{ "perfcl_clk",	0x0c0,	CPU,	0x100,	0x3, 8,	0x0FF },
+		{ "pwrcl_clk",	0x0c0,	CPU,	0x000,	0x3, 10,	0x0FF },
+		{ "perfcl_clk",	0x0c0,	CPU,	0x100,	0x3, 10,	0x0FF },
 	),
 	.hw.init = &(struct clk_init_data){
 		.name = "gcc_debug_mux",
